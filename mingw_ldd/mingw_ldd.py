@@ -57,11 +57,11 @@ def find_dll(dll, dll_lookup_dirs, arch):
     return (None, None)
 
 
-def dep_tree(pe, dll_lookup_dirs, disable_multiprocessing):
+def dep_tree(pe_files, dll_lookup_dirs, disable_multiprocessing):
     dlls = {} # stores all dlls we encounter, specifically {(basename(dll)).lower(): abspath(dll)}
     deps = {} # stores pe -> [dll] relations, specifically {abspath(pe): [basename(pe's direct dll dep)]}
-    pe_data = pefile.PE(pe)
-    arch = pe_data.FILE_HEADER.Machine
+    pe_data = None
+    arch = None
 
     def _dep_tree(pe, pe_deps):
         pe = os.path.abspath(pe)
@@ -88,7 +88,11 @@ def dep_tree(pe, dll_lookup_dirs, disable_multiprocessing):
             if dll_path:
                 _dep_tree(dll_path, dll_deps)
 
-    _dep_tree(pe, get_pe_deps(pe_data))
+    for pe in pe_files:
+        # print("current file:", pe)
+        pe_data = pefile.PE(pe)
+        arch = pe_data.FILE_HEADER.Machine
+        _dep_tree(pe, get_pe_deps(pe_data))
     return (dlls, deps)
 
 
@@ -100,16 +104,24 @@ def main():
     else:
         parser = argparse.ArgumentParser(description=__description__)
         parser.add_argument('--version', action='version', version='{}'.format(__version__))
-    parser.add_argument('--output-format', type=str, choices=('ldd-like', 'per-dep-list', 'tree'), default='ldd-like')
-    parser.add_argument('--dll-lookup-dirs', metavar='DLL_LOOKUP_DIR', type=str, default=[], nargs='+', required=True)
     parser.add_argument('--disable-multiprocessing', default=False, action='store_true')
-    parser.add_argument('pe_file', metavar='PE_FILE')
+    parser.add_argument('--pe-files', '--input', '-i', metavar='PE_FILE', type=str, default=[], nargs='+', required=True)
+    parser.add_argument('--dll-lookup-dirs', '-d', metavar='DLL_LOOKUP_DIR', type=str, default=[], nargs='+', required=True)
+    parser.add_argument('--output-format', type=str, choices=('ldd-like', 'per-dep-list', 'tree'), default='ldd-like')
     args = parser.parse_args()
+
     dll_lookup_dirs = [os.path.abspath(dir) for dir in args.dll_lookup_dirs]
     for dir in dll_lookup_dirs:
         if not os.path.isdir(dir):
             sys.exit('Error: "{}" directory doesn\'t exist.'.format(dir))
-    (dlls, deps) = dep_tree(args.pe_file, dll_lookup_dirs, args.disable_multiprocessing)
+
+    pe_files = [os.path.abspath(pe_file) for pe_file in args.pe_files]
+    for pe_file in pe_files:
+        if not os.path.isfile(pe_file):
+            sys.exit('Error: "{}" file doesn\'t exist.'.format(pe_file))
+
+    (dlls, deps) = dep_tree(pe_files, dll_lookup_dirs, args.disable_multiprocessing)
+    
     if args.output_format == 'ldd-like':
         for dll, dll_path in sorted(dlls.items(), key=lambda e: e[0].casefold()):
             print(' ' * 7, dll, '=>', dll_path)
@@ -140,7 +152,8 @@ def main():
                     new_prefix = '{}{}'.format(prefix, '    ' if is_last_dll else '│   ')
                     print_tree(dll_path, level+1, new_prefix)
                     printed.remove(dll)
-        print_tree(os.path.abspath(args.pe_file))
+        for pe_file in pe_files:
+            print_tree(pe_file)
 
 if __name__ == '__main__':
     main()
