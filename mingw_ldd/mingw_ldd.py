@@ -104,10 +104,11 @@ def main():
     else:
         parser = argparse.ArgumentParser(description=__description__)
         parser.add_argument('--version', action='version', version='{}'.format(__version__))
-    parser.add_argument('--disable-multiprocessing', default=False, action='store_true')
+    parser.add_argument('--disable-multiprocessing', '-m', default=False, action='store_true')
+    parser.add_argument('--disable-api-set-filter', '-a', default=False, action='store_true')
     parser.add_argument('--pe-files', '--input', '-i', metavar='PE_FILE', type=str, default=[], nargs='+', required=True)
     parser.add_argument('--dll-lookup-dirs', '-d', metavar='DLL_LOOKUP_DIR', type=str, default=[], nargs='+', required=True)
-    parser.add_argument('--output-format', type=str, choices=('ldd-like', 'per-dep-list', 'tree'), default='ldd-like')
+    parser.add_argument('--output-format', '-o', type=str, choices=('ldd-like', 'per-dep-list', 'tree'), default='ldd-like')
     args = parser.parse_args()
 
     dll_lookup_dirs = [os.path.abspath(dir) for dir in args.dll_lookup_dirs]
@@ -121,6 +122,14 @@ def main():
             sys.exit('Error: "{}" file doesn\'t exist.'.format(pe_file))
 
     (dlls, deps) = dep_tree(pe_files, dll_lookup_dirs, args.disable_multiprocessing)
+
+    # ref: https://learn.microsoft.com/en-us/windows/win32/apiindex/windows-apisets
+    if not args.disable_api_set_filter:
+        # dlls -> {(basename(dll)).lower(): abspath(dll)}
+        dlls = {name:path for (name,path) in dlls.items() if not name.startswith("api-") and not name.startswith("ext-")}
+        # deps -> {abspath(pe): [basename(pe's direct dll dep)]}
+        for abs_pe, list_deps in deps.items():
+            deps[abs_pe] = [dep for dep in list_deps if not dep.startswith("api-") and not dep.startswith("ext-")]
     
     if args.output_format == 'ldd-like':
         for dll, dll_path in sorted(dlls.items(), key=lambda e: e[0].casefold()):
