@@ -111,12 +111,12 @@ def main():
     parser.add_argument('--output-format', '-o', type=str, choices=('ldd-like', 'per-dep-list', 'tree'), default='ldd-like')
     args = parser.parse_args()
 
-    dll_lookup_dirs = [os.path.abspath(dir) for dir in args.dll_lookup_dirs]
+    dll_lookup_dirs = [os.path.abspath(dir) for dir in args.dll_lookup_dirs if not "*" in dir]
     for dir in dll_lookup_dirs:
         if not os.path.isdir(dir):
             sys.exit('Error: "{}" directory doesn\'t exist.'.format(dir))
 
-    pe_files = [os.path.abspath(pe_file) for pe_file in args.pe_files]
+    pe_files = [os.path.abspath(pe_file) for pe_file in args.pe_files if not "*" in pe_file]
     for pe_file in pe_files:
         if not os.path.isfile(pe_file):
             sys.exit('Error: "{}" file doesn\'t exist.'.format(pe_file))
